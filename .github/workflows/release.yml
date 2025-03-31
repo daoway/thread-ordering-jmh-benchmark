@@ -3,32 +3,58 @@
 on:
   push:
     tags:
-      - 'v*' # Trigger on version tags like v1.0.0
+      - 'v*'
+
+permissions:
+  contents: write
 
 jobs:
   build:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
-      
+
       - name: Set up JDK
         uses: actions/setup-java@v3
         with:
-          java-version: '21'  # Adjust to your project's Java version
+          java-version: '17'
           distribution: 'temurin'
           cache: maven
-      
+
       - name: Build with Maven
         run: mvn package
-      
-      - name: Create Release
-        id: create_release
-        uses: softprops/action-gh-release@v1
+
+      - name: Release
+        uses: actions/github-script@v6
         with:
-          files: |
-            target/*.jar
-          name: Release ${{ github.ref_name }}
-          draft: false
-          prerelease: false
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const fs = require('fs');
+            const path = require('path');
+            
+            // Get all jar files from target directory
+            const targetDir = path.join(process.env.GITHUB_WORKSPACE, 'target');
+            const jarFiles = fs.readdirSync(targetDir)
+              .filter(file => file.endsWith('.jar'))
+              .map(file => path.join(targetDir, file));
+            
+            // Create release with jar files
+            const tagName = process.env.GITHUB_REF.replace('refs/tags/', '');
+            const release = await github.rest.repos.createRelease({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              tag_name: tagName,
+              name: `Release ${tagName}`,
+              generate_release_notes: true
+            });
+            
+            // Upload each jar file
+            for (const jarFile of jarFiles) {
+              const jarName = path.basename(jarFile);
+              await github.rest.repos.uploadReleaseAsset({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                release_id: release.data.id,
+                name: jarName,
+                data: fs.readFileSync(jarFile)
+              });
+            }
