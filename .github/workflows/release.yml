@@ -31,13 +31,11 @@ jobs:
             const fs = require('fs');
             const path = require('path');
             
-            // Get all jar files from target directory
+            // Find only the thread-ordering-benchmarks.jar file
             const targetDir = path.join(process.env.GITHUB_WORKSPACE, 'target');
-            const jarFiles = fs.readdirSync(targetDir)
-              .filter(file => file.endsWith('.jar'))
-              .map(file => path.join(targetDir, file));
+            const jarFile = path.join(targetDir, 'thread-ordering-benchmarks.jar');
             
-            // Create release with jar files
+            // Create release
             const tagName = process.env.GITHUB_REF.replace('refs/tags/', '');
             const release = await github.rest.repos.createRelease({
               owner: context.repo.owner,
@@ -47,14 +45,15 @@ jobs:
               generate_release_notes: true
             });
             
-            // Upload each jar file
-            for (const jarFile of jarFiles) {
-              const jarName = path.basename(jarFile);
+            // Upload only the specific jar file
+            if (fs.existsSync(jarFile)) {
               await github.rest.repos.uploadReleaseAsset({
                 owner: context.repo.owner,
                 repo: context.repo.repo,
                 release_id: release.data.id,
-                name: jarName,
+                name: 'thread-ordering-benchmarks.jar',
                 data: fs.readFileSync(jarFile)
               });
+            } else {
+              core.setFailed("Could not find thread-ordering-benchmarks.jar in the target directory");
             }
